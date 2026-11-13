@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PONERO 견적 도우미</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 왼쪽 = 문의 입력과 추출 항목, 오른쪽 = 되물을 질문·견적·답장 초안. 폰에서는 한 줄로 쌓임 */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #1b2530;
+  --muted: #5b6875;
+  --line: #d9dfe5;
+  --accent: #1f5f8b;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3eef6;
+  --warn-bg: #fff4dc;
+  --warn-fg: #7a5200;
+  --ok: #2d7a4b;
+  --font-head: "IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif;
+  --font-body: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171c; --surface: #1a2128; --fg: #e4e9ee; --muted: #98a5b2; --line: #2c3640;
+    --accent: #6aaedb; --accent-ink: #0d1a24; --accent-soft: #1d3142;
+    --warn-bg: #3a2f14; --warn-fg: #f3d58e; --ok: #74c494; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171c; --surface: #1a2128; --fg: #e4e9ee; --muted: #98a5b2; --line: #2c3640;
+  --accent: #6aaedb; --accent-ink: #0d1a24; --accent-soft: #1d3142;
+  --warn-bg: #3a2f14; --warn-fg: #f3d58e; --ok: #74c494; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+h1 { font-family: var(--font-head); font-size: 1.45rem; margin: 0; letter-spacing: -0.01em; }
+h1 small { font-weight: 500; color: var(--muted); font-size: 0.9rem; margin-left: 6px; }
+h2 { font-family: var(--font-head); font-size: 1.02rem; margin: 0; text-wrap: balance; }
+.notice { background: var(--warn-bg); color: var(--warn-fg); border-radius: var(--radius); padding: 10px 14px; font-size: 0.9rem; }
+.cols { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 880px) { .cols { grid-template-columns: 1fr 1fr; align-items: start; } }
+.col { display: grid; gap: 16px; min-width: 0; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.sec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.label { font-size: 0.78rem; color: var(--muted); letter-spacing: 0.04em; }
+textarea, input, select {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0;
+}
+textarea { min-height: 150px; resize: vertical; }
+textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+button {
+  font: inherit; font-weight: 500; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.small { padding: 4px 10px; font-size: 0.85rem; }
+.fields { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.fields .full { grid-column: 1 / -1; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 0.82rem; color: var(--muted); }
+.field.empty input, .field.empty select { border-style: dashed; }
+.pill { display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.pill.miss { background: var(--warn-bg); color: var(--warn-fg); }
+ol.qs { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.done { color: var(--ok); font-size: 0.9rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+td:first-child { white-space: normal; }
+@media (max-width: 520px) { .col-price { display: none; } th, td { padding: 7px 4px; } }
+tr.total td { font-weight: 700; border-bottom: none; font-size: 1.05rem; }
+.hint { font-size: 0.85rem; color: var(--muted); margin: 0; }
+pre.reply { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; margin: 0; font-family: var(--font-body); background: var(--bg); border-radius: 8px; padding: 12px; }
+details > summary { cursor: pointer; font-family: var(--font-head); font-weight: 700; }
+.price-grid { display: grid; gap: 8px; }
+.price-row { display: grid; grid-template-columns: 1fr 120px 52px; gap: 8px; align-items: center; }
+.price-row span { font-size: 0.9rem; }
+.toast { font-size: 0.85rem; color: var(--ok); min-height: 1.2em; }
+@media (prefers-reduced-motion: no-preference) { button { transition: filter .15s; } button:hover { filter: brightness(0.96); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PONERO 견적 도우미 <small>칸막이 시공 · MVP</small></h1>
+    <span class="label">고객에게 자동으로 보내지 않아요. 사장님이 확인하고 직접 보내요.</span>
+  </header>
+
+  <div class="notice" id="priceNotice">지금 단가는 <b>추측한 예시값</b>이에요. 맨 아래 <b>단가 설정</b>에서 사장님 실제 가격으로 바꿔 주세요.</div>
+
+  <div class="cols">
+    <div class="col">
+      <section>
+        <div class="sec-head">
+          <h2>1. 고객 문의 붙여넣기</h2>
+          <span class="pill" id="sampleTag">예시 문의</span>
+        </div>
+        <textarea id="inquiry" placeholder="당근, 네이버 등에서 받은 고객 문의를 그대로 붙여 넣으세요."></textarea>
+        <div class="row-btns">
+          <button class="primary" id="btnExtract">정리하기</button>
+          <button id="btnClear">지우기</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head">
+          <h2>2. 문의 내용 정리</h2>
+          <span class="hint">틀린 건 직접 고치면 견적·답장이 바로 바뀌어요</span>
+        </div>
+        <div class="fields">
+          <div class="field full"><label for="f_material">칸막이 종류</label><select id="f_material"></select></div>
+          <div class="field"><label for="f_length">길이(가로, m)</label><input id="f_length" inputmode="decimal" placeholder="예: 4.5"></div>
+          <div class="field"><label for="f_height">높이(m)</label><input id="f_height" inputmode="decimal" placeholder="예: 2.4"></div>
+          <div class="field"><label for="f_count">칸 수 (화장실)</label><input id="f_count" inputmode="numeric" placeholder="예: 3"></div>
+          <div class="field"><label for="f_doors">문 개수</label><input id="f_doors" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label for="f_color">색상</label><input id="f_color" placeholder="예: 화이트"></div>
+          <div class="field"><label for="f_area">공간 크기(평)</label><input id="f_area" inputmode="decimal" placeholder="예: 20"></div>
+          <div class="field full"><label for="f_place">설치 장소</label><input id="f_place" placeholder="예: 서울 마포구 사무실"></div>
+          <div class="field full"><label for="f_schedule">희망 일정</label><input id="f_schedule" placeholder="예: 다음주 토요일"></div>
+          <div class="field full"><label for="f_demolish">기존 칸막이 철거</label>
+            <select id="f_demolish"><option value="no">필요 없음</option><option value="yes">필요함</option></select></div>
+          <div class="field full"><label for="f_etc">기타 요청</label><input id="f_etc" placeholder="예: 방음, 주말 작업"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section>
+        <div class="sec-head">
+          <h2>3. 고객에게 되물을 것</h2>
+          <button class="small" id="copyQs">복사</button>
+        </div>
+        <ol class="qs" id="questions"></ol>
+        <div class="done" id="noQs" hidden>필요한 정보가 다 있어요.</div>
+      </section>
+
+      <section>
+        <div class="sec-head">
+          <h2>4. 견적 초안</h2>
+          <label class="hint"><input type="checkbox" id="vat" style="width:auto"> 부가세 10% 포함</label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>항목</th><th class="num">수량</th><th class="num col-price">단가</th><th class="num">금액</th></tr></thead>
+            <tbody id="quoteBody"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="quoteHint"></p>
+      </section>
+
+      <section>
+        <div class="sec-head">
+          <h2>5. 답장 초안</h2>
+          <button class="small primary" id="copyReply">답장 복사</button>
+        </div>
+        <pre class="reply" id="reply"></pre>
+        <div class="toast" id="toast" aria-live="polite"></div>
+      </section>
+    </div>
+  </div>
+
+  <section>
+    <details id="settings">
+      <summary>단가 설정 · 말투 설정</summary>
+      <div style="display:grid;gap:14px;margin-top:12px">
+        <div class="price-grid" id="priceGrid"></div>
+        <div class="fields">
+          <div class="field"><label for="s_name">상호명</label><input id="s_name"></div>
+          <div class="field"><label for="s_greet">첫인사</label><input id="s_greet"></div>
+          <div class="field full"><label for="s_close">마무리 인사</label><input id="s_close"></div>
+        </div>
+        <div class="row-btns">
+          <button class="primary" id="btnSave">저장</button>
+          <button id="btnReset">예시값으로 되돌리기</button>
+        </div>
+        <p class="hint">설정은 이 기기의 브라우저에만 저장돼요.</p>
+      </div>
+    </details>
+  </section>
+</div>
+
+<script>
+(function () {
+  // ---- 기본 설정 (단가는 추측한 예시값. 사장님 실제 가격으로 바꿔야 함) ----
+  var DEFAULTS = {
+    materials: [
+      { id: 'gypsum', name: '석고보드 경량칸막이(가벽)', unit: 'm', price: 120000, keys: ['석고', '경량', '가벽', '벽체', '벽 세우', '벽을 세우'] },
+      { id: 'glass',  name: '강화유리 칸막이',         unit: 'm', price: 350000, keys: ['유리', '통유리'] },
+      { id: 'alu',    name: '알루미늄 파티션',         unit: 'm', price: 200000, keys: ['알루미늄', '파티션', '사무실 칸막이'] },
+      { id: 'toilet', name: '화장실 칸막이(큐비클)',   unit: '칸', price: 600000, keys: ['화장실', '큐비클', '변기', '소변기'] }
+    ],
+    door: 250000,
+    demolish: 200000,
+    base: 150000,
+    name: 'OO칸막이',
+    greet: '안녕하세요, {상호}입니다. 문의 주셔서 감사합니다.',
+    close: '편하실 때 답장 주시면 바로 안내드리겠습니다. 감사합니다!'
+  };
+  var SAMPLE = '안녕하세요 사무실 안에 회의실 하나 만들려고 하는데요\n가로 4.5m 정도 유리 칸막이로 하고 싶어요. 문도 하나 달아야 하고요.\n위치는 서울 마포구고 다음주 토요일에 가능할까요? 견적 궁금합니다.';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg;
+  function load() {
+    try { var s = localStorage.getItem('ponero_cfg'); if (s) return JSON.parse(s); } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULTS));
+  }
+  function save() { try { localStorage.setItem('ponero_cfg', JSON.stringify(cfg)); return true; } catch (e) { return false; } }
+  cfg = load();
+
+  // ---- 문의에서 정보 뽑기 (AI 없이 규칙으로) ----
+  var NUM_KO = { '한': 1, '하나': 1, '두': 2, '둘': 2, '세': 3, '셋': 3, '네': 4, '넷': 4, '다섯': 5, '여섯': 6 };
+  function toNum(s) { return NUM_KO[s] != null ? NUM_KO[s] : parseFloat(s); }
+  function toMeter(v, u) { v = parseFloat(v); if (/mm/.test(u)) return v / 1000; if (/cm|센/.test(u)) return v / 100; return v; }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  var UNIT = '(mm|cm|m|미터|센치|센티|센티미터)';
+
+  function extract(t) {
+    var r = { material: '', length: '', height: '', count: '', doors: '', color: '', area: '', place: '', schedule: '', demolish: 'no', etc: '' };
+    var low = t.toLowerCase();
+
+    // 종류: 화장실이 먼저(장소 단어와 겹치므로 우선), 그다음 유리 > 알루미늄 > 석고
+    var order = ['toilet', 'glass', 'alu', 'gypsum'];
+    for (var i = 0; i < order.length && !r.material; i++) {
+      var m = cfg.materials.find(function (x) { return x.id === order[i]; });
+      if (m && m.keys.some(function (k) { return low.indexOf(k) >= 0; })) r.material = m.id;
+    }
+
+    // 가로 x 세로 형태 (예: 4x2.4m)
+    var mx = t.match(new RegExp('(\\d+(?:\\.\\d+)?)\\s*[x×*]\\s*(\\d+(?:\\.\\d+)?)\\s*' + UNIT, 'i'));
+    if (mx) { r.length = round2(toMeter(mx[1], mx[3])); r.height = round2(toMeter(mx[2], mx[3])); }
+
+    // 높이
+    var mh = t.match(new RegExp('(높이|높게|천장)[^\\d]{0,6}(\\d+(?:\\.\\d+)?)\\s*' + UNIT, 'i'));
+    if (mh) r.height = round2(toMeter(mh[2], mh[3]));
+
+    // 길이: 높이 앞에 붙은 숫자는 건너뜀
+    if (!r.length) {
+      var re = new RegExp('(\\d+(?:\\.\\d+)?)\\s*' + UNIT, 'gi'), g;
+      while ((g = re.exec(t))) {
+        var before = t.slice(Math.max(0, g.index - 8), g.index);
+        if (/높이|높게|천장/.test(before)) continue;
+        r.length = round2(toMeter(g[1], g[2])); break;
+      }
+    }
+
+    var mc = t.match(/(\d+|한|두|세|네|다섯|여섯)\s*칸/);
+    if (mc) r.count = toNum(mc[1]);
+
+    // 문: '문의'는 제외
+    if (/출입문|여닫이|미닫이|도어|(^|[^가-힣])문(?!의)/.test(t)) {
+      var md = t.match(/(?:문|도어)[^\n.]{0,8}?(\d+|하나|한|두|둘|세|셋)\s*개?/);
+      r.doors = md ? toNum(md[1]) : 1;
+    }
+
+    var ma = t.match(/(\d+(?:\.\d+)?)\s*평/);
+    if (ma) r.area = parseFloat(ma[1]);
+
+    var colors = ['화이트', '흰색', '하얀', '블랙', '검정', '검은', '그레이', '회색', '아이보리', '베이지', '우드', '나무색', '월넛', '오크', '실버', '투명', '반투명', '불투명', '시트지', '필름'];
+    r.color = colors.filter(function (c) { return t.indexOf(c) >= 0; }).join(', ');
+
+    var places = ['사무실', '회의실', '화장실', '상가', '매장', '가게', '학원', '병원', '카페', '식당', '공장', '창고', '아파트', '원룸', '주택', '오피스텔', '교회', '어린이집'];
+    var region = t.match(/(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)?\s*([가-힣]{1,4}(?:시|구|군|동|읍))(?=[\s,.에은는고이인로라쪽]|$)/);
+    var pl = [];
+    if (region) pl.push((region[1] ? region[1] + ' ' : '') + region[2]);
+    places.forEach(function (p) { if (t.indexOf(p) >= 0) pl.push(p); });
+    r.place = pl.join(' ');
+
+    var sch = [];
+    var sd = t.match(/\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*\/\s*\d{1,2}/);
+    if (sd) sch.push(sd[0]);
+    var sw = t.match(/(이번\s*주|다음\s*주|다다음\s*주|이번\s*달|다음\s*달|내일|모레|주말|평일)\s*([월화수목금토일]요일)?/);
+    if (sw) sch.push(sw[0]);
+    else { var dy = t.match(/[월화수목금토일]요일/); if (dy) sch.push(dy[0]); }
+    if (/급하|빨리|최대한 빨리|급해/.test(t)) sch.push('급함');
+    r.schedule = sch.join(' ');
+
+    if (/철거|뜯어|떼어|제거/.test(t)) r.demolish = 'yes';
+
+    var etc = [];
+    if (/방음|소음|소리/.test(t)) etc.push('방음 요청');
+    if (/야간|밤에|저녁/.test(t)) etc.push('야간 작업 희망');
+    if (/주말/.test(t)) etc.push('주말 작업 희망');
+    if (/블라인드/.test(t)) etc.push('블라인드');
+    if (/전기|콘센트|조명/.test(t)) etc.push('전기·조명 관련 문의');
+    r.etc = etc.join(', ');
+    return r;
+  }
+
+  // ---- 화면 ----
+  var F = ['material', 'length', 'height', 'count', 'doors', 'color', 'area', 'place', 'schedule', 'demolish', 'etc'];
+  function fillMaterialOptions() {
+    var sel = $('f_material'), cur = sel.value;
+    sel.innerHTML = '<option value="">(모름)</option>' + cfg.materials.map(function (m) {
+      return '<option value="' + m.id + '">' + m.name + '</option>';
+    }).join('');
+    sel.value = cur;
+  }
+  function setFields(r) { F.forEach(function (k) { $('f_' + k).value = r[k] == null ? '' : r[k]; }); }
+  function getFields() { var o = {}; F.forEach(function (k) { o[k] = $('f_' + k).value.trim(); }); return o; }
+  function won(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function questions(f) {
+    var q = [];
+    var mat = cfg.materials.find(function (m) { return m.id === f.material; });
+    if (!mat) q.push('어떤 칸막이를 생각하고 계세요? (석고보드 가벽 / 유리 / 알루미늄 파티션 / 화장실 칸막이)');
+    if (mat && mat.unit === '칸') { if (!f.count) q.push('화장실 칸막이는 몇 칸 필요하세요?'); }
+    else {
+      if (!f.length) q.push('칸막이를 설치할 길이(가로)가 대략 몇 m 정도인가요?');
+      if (!f.height) q.push('천장까지 막는 건가요? 천장 높이가 대략 몇 m인지 알려주세요.');
+    }
+    if (!f.color) q.push('원하시는 색상이나 마감(투명/불투명 등)이 있으세요?');
+    if (!f.place) q.push('설치할 곳 주소(지역)와 건물 종류(사무실, 상가 등)를 알려주세요.');
+    if (!f.schedule) q.push('희망하시는 시공 날짜가 있으세요?');
+    q.push('현장 사진 몇 장 보내주시면 더 정확하게 안내드릴 수 있어요.');
+    return q;
+  }
+
+  function quote(f) {
+    var lines = [], missing = '';
+    var mat = cfg.materials.find(function (m) { return m.id === f.material; });
+    if (!mat) missing = '칸막이 종류를 알면 계산돼요.';
+    else {
+      var qty = parseFloat(mat.unit === '칸' ? f.count : f.length);
+      if (!(qty > 0)) missing = mat.unit === '칸' ? '칸 수를 알면 계산돼요.' : '길이를 알면 계산돼요.';
+      else lines.push({ name: mat.name, qty: qty, unit: mat.unit, price: mat.price });
+    }
+    var d = parseFloat(f.doors);
+    if (d > 0) lines.push({ name: '문 설치', qty: d, unit: '개', price: cfg.door });
+    if (f.demolish === 'yes') lines.push({ name: '기존 칸막이 철거', qty: 1, unit: '식', price: cfg.demolish });
+    lines.push({ name: '출장·기본 시공비', qty: 1, unit: '식', price: cfg.base });
+    var sum = lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0);
+    var vat = $('vat').checked ? Math.round(sum * 0.1) : 0;
+    return { lines: lines, sum: sum, vat: vat, total: sum + vat, missing: missing };
+  }
+
+  function reply(f, q, qt) {
+    var mat = cfg.materials.find(function (m) { return m.id === f.material; });
+    var out = [];
+    out.push(cfg.greet.replace('{상호}', cfg.name));
+    var info = [];
+    if (mat) info.push('- 종류: ' + mat.name);
+    if (f.length && (!mat || mat.unit !== '칸')) info.push('- 길이: 약 ' + f.length + 'm' + (f.height ? ' (높이 ' + f.height + 'm)' : ''));
+    if (f.count && mat && mat.unit === '칸') info.push('- 칸 수: ' + f.count + '칸');
+    if (parseFloat(f.doors) > 0) info.push('- 문: ' + f.doors + '개');
+    if (f.color) info.push('- 색상: ' + f.color);
+    if (f.place) info.push('- 장소: ' + f.place);
+    if (f.schedule) info.push('- 희망 일정: ' + f.schedule);
+    if (f.demolish === 'yes') info.push('- 기존 칸막이 철거 포함');
+    if (f.etc) info.push('- 기타: ' + f.etc);
+    if (info.length) out.push('', '말씀하신 내용 정리해 보면', info.join('\n'));
+    if (!qt.missing) {
+      out.push('', '대략적인 견적은 ' + won(qt.total) + ' 정도 예상됩니다.' +
+        ($('vat').checked ? ' (부가세 포함)' : ' (부가세 별도)') + '\n정확한 금액은 현장 확인 후 확정해 드릴게요.');
+      if (q.length) out.push('', '확인차 몇 가지만 여쭤볼게요.');
+    } else {
+      out.push('', '정확한 견적을 위해 몇 가지 여쭤볼게요.');
+    }
+    if (q.length) out.push(q.map(function (x, i) { return (i + 1) + '. ' + x; }).join('\n'));
+    out.push('', cfg.close);
+    return out.join('\n');
+  }
+
+  function render() {
+    var f = getFields();
+    F.forEach(function (k) {
+      var el = $('f_' + k).parentElement;
+      el.classList.toggle('empty', !f[k] && k !== 'demolish' && k !== 'etc' && k !== 'area' && k !== 'doors');
+    });
+    var q = questions(f);
+    $('questions').innerHTML = q.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('');
+    $('noQs').hidden = q.length > 1;
+
+    var qt = quote(f);
+    var rows = qt.lines.map(function (l) {
+      return '<tr><td>' + esc(l.name) + '</td><td class="num">' + l.qty + l.unit + '</td><td class="num col-price">' + won(l.price) + '</td><td class="num">' + won(l.qty * l.price) + '</td></tr>';
+    });
+    if (qt.missing) {
+      rows.unshift('<tr><td colspan="4"><span class="pill miss">' + esc(qt.missing) + '</span></td></tr>');
+    } else {
+      if (qt.vat) rows.push('<tr><td>부가세 10%</td><td></td><td class="col-price"></td><td class="num">' + won(qt.vat) + '</td></tr>');
+      rows.push('<tr class="total"><td>합계 (예상)</td><td></td><td class="col-price"></td><td class="num">' + won(qt.total) + '</td></tr>');
+    }
+    $('quoteBody').innerHTML = rows.join('');
+    $('quoteHint').textContent = qt.missing ? '' : '추측 단가 기준이에요. 현장 상황에 따라 달라질 수 있어요.';
+    $('reply').textContent = reply(f, q, qt);
+  }
+
+  function renderSettings() {
+    $('priceGrid').innerHTML = cfg.materials.map(function (m, i) {
+      return '<div class="price-row"><span>' + esc(m.name) + '</span><input id="p_' + i + '" inputmode="numeric" value="' + m.price + '"><span>원/' + m.unit + '</span></div>';
+    }).join('') +
+      '<div class="price-row"><span>문 설치</span><input id="p_door" inputmode="numeric" value="' + cfg.door + '"><span>원/개</span></div>' +
+      '<div class="price-row"><span>기존 칸막이 철거</span><input id="p_demolish" inputmode="numeric" value="' + cfg.demolish + '"><span>원</span></div>' +
+      '<div class="price-row"><span>출장·기본 시공비</span><input id="p_base" inputmode="numeric" value="' + cfg.base + '"><span>원</span></div>';
+    $('s_name').value = cfg.name; $('s_greet').value = cfg.greet; $('s_close').value = cfg.close;
+  }
+  function num(v, d) { var n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return isNaN(n) ? d : n; }
+
+  function toast(msg) { $('toast').textContent = msg; setTimeout(function () { $('toast').textContent = ''; }, 2000); }
+  function copy(text, el) {
+    function fallback() {
+      var r = document.createRange(); r.selectNodeContents(el);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      toast('복사가 안 돼서 글자를 선택해 뒀어요. 길게 눌러 복사하세요.');
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { toast('복사했어요. 당근·네이버 채팅에 붙여 넣으세요.'); }, fallback);
+    } catch (e) { fallback(); }
+  }
+
+  // ---- 이벤트 ----
+  $('btnExtract').addEventListener('click', function () {
+    setFields(extract($('inquiry').value));
+    $('sampleTag').hidden = $('inquiry').value !== SAMPLE;
+    render();
+  });
+  $('btnClear').addEventListener('click', function () {
+    $('inquiry').value = ''; setFields({ demolish: 'no' }); $('sampleTag').hidden = true; render(); $('inquiry').focus();
+  });
+  $('inquiry').addEventListener('input', function () { $('sampleTag').hidden = $('inquiry').value === '' || $('inquiry').value !== SAMPLE; });
+  F.forEach(function (k) { $('f_' + k).addEventListener('input', render); $('f_' + k).addEventListener('change', render); });
+  $('vat').addEventListener('change', render);
+  $('copyReply').addEventListener('click', function () { copy($('reply').textContent, $('reply')); });
+  $('copyQs').addEventListener('click', function () {
+    var t = Array.prototype.map.call($('questions').children, function (li, i) { return (i + 1) + '. ' + li.textContent; }).join('\n');
+    copy(t, $('questions'));
+  });
+  $('btnSave').addEventListener('click', function () {
+    cfg.materials.forEach(function (m, i) { m.price = num($('p_' + i).value, m.price); });
+    cfg.door = num($('p_door').value, cfg.door);
+    cfg.demolish = num($('p_demolish').value, cfg.demolish);
+    cfg.base = num($('p_base').value, cfg.base);
+    cfg.name = $('s_name').value.trim() || DEFAULTS.name;
+    cfg.greet = $('s_greet').value.trim() || DEFAULTS.greet;
+    cfg.close = $('s_close').value.trim() || DEFAULTS.close;
+    var ok = save(); renderSettings(); render();
+    toast(ok ? '저장했어요.' : '이 브라우저에서는 저장이 안 돼요. 지금 화면에서만 적용돼요.');
+  });
+  $('btnReset').addEventListener('click', function () {
+    cfg = JSON.parse(JSON.stringify(DEFAULTS)); save(); renderSettings(); fillMaterialOptions(); render(); toast('예시값으로 되돌렸어요.');
+  });
+
+  // ---- 시작: 예시 문의를 넣고 정리된 상태로 보여줌 ----
+  fillMaterialOptions();
+  renderSettings();
+  $('inquiry').value = SAMPLE;
+  setFields(extract(SAMPLE));
+  render();
+})();
+</script>
+</body>
+</html>
